@@ -1,13 +1,14 @@
-# Recuperação de sessão não está bom ainda. Ele identifica a sessão mas insere o link para o login de qualquer forma
-# Colocar uma barra de progresso fora do terminal
-# Colocar um timer após cada registro para dar tempo do servidor respirar e receber a requisição
-# Comando terminal: google-chrome --remote-debugging-port=9222 --user-data-dir="~/ChromeProfile"
+# Session recovery not working well yet. It identifies the session but still inserts the login link.
+# Add a progress bar outside the terminal
+# Add a timer after each record to give the server time to breathe and process the request
+# Terminal command: google-chrome --remote-debugging-port=9222 --user-data-dir="~/ChromeProfile"
+# Connection speed could be improved
 import sys
 import os
 import time
 import pandas as pd
-import csv  
-from datetime import datetime 
+import csv
+from datetime import datetime
 from core.ferramentas import configurar_logger, verificar_ambiente, listar_planilhas, conectar, normalizar
 from core.primeira_pagina import (
     acessar_frame_principal, obter_painel_de_tarefas, expandir_filtros,
@@ -18,192 +19,199 @@ from core.segunda_pagina import (
     marcar_checkbox_categoria, confirmar_acao_final, fechar_modal_clicando_fora
 )
 
-# CONSTANTES
-ARQUIVO_CACHE = "output/registros_processados.csv" 
-ARQUIVO_CATEGORIA_NOME = "input/categorias.txt"
-MODO_APENAS_PRIMEIRA_COLUNA = True
+# CONSTANTS
+CACHE_FILE = "output/processed_records.csv"
+CATEGORY_FILE = "input/categories.txt"
+ONLY_FIRST_COLUMN_MODE = True
 logger = configurar_logger()
 
-# --- FUNÇÕES AUXILIARES ---
-def ler_registros_ods(caminho):
-    try:
-        if caminho.endswith('.ods'):
-            df = pd.read_excel(caminho, engine='odf')
-        else:
-            df = pd.read_excel(caminho) 
 
-        if MODO_APENAS_PRIMEIRA_COLUNA:
-            coluna_dados = df.iloc[:, 0].dropna().astype(str)
-            return [p.strip() for p in coluna_dados if p.strip()]
+# Reads the ODS or XLSX file and returns a list of records. Uses global variable
+def read_ods_records(path):
+    try:
+        if path.endswith('.ods'):
+            df = pd.read_excel(path, engine='odf')
         else:
-            todos = df.values.flatten()
-            return [str(p).strip() for p in todos if str(p).strip() != 'nan' and str(p).strip()]
+            df = pd.read_excel(path)
+
+        if ONLY_FIRST_COLUMN_MODE:
+            data_column = df.iloc[:, 0].dropna().astype(str)
+            return [p.strip() for p in data_column if p.strip()]
+        else:
+            all_values = df.values.flatten()
+            return [str(p).strip() for p in all_values if str(p).strip() != 'nan' and str(p).strip()]
     except Exception as e:
-        logger.error(f"Erro ao ler arquivo {caminho}: {e}")
+        logger.error(f"Error reading file {path}: {e}")
         return []
 
-def carregar_parametros_categoria(caminho_arquivo, lista_categorias=ARQUIVO_CATEGORIA_NOME):
+
+# Filter: identifies category by name similarity
+def load_category_params(file_path, category_list=CATEGORY_FILE):
     try:
-        with open(lista_categorias, "r", encoding="utf-8") as f:
-            categorias_disponiveis = [l.strip() for l in f if l.strip()]
-    except:
-        logger.critical("Erro: 'input/categorias.txt' não encontrado.")
+        with open(category_list, "r", encoding="utf-8") as f:
+            available_categories = [l.strip() for l in f if l.strip()]
+    except Exception as e:
+        logger.critical(f"Error: {category_list} not found.")
         sys.exit(1)
 
-    nome_arquivo = normalizar(os.path.basename(caminho_arquivo))
-    melhor_match, maior_score = None, 0
+    file_name = normalizar(os.path.basename(file_path))
+    best_match, highest_score = None, 0
 
-    for categoria in categorias_disponiveis:
-        score = sum(1 for p in normalizar(categoria).split() if p in nome_arquivo)
-        if score > maior_score:
-            maior_score = score
-            melhor_match = categoria
+    for category in available_categories:
+        score = sum(1 for p in normalizar(category).split() if p in file_name)
+        if score > highest_score:
+            highest_score = score
+            best_match = category
 
-    if melhor_match: return melhor_match
-    logger.error(f"Não achei categoria correspondente para o arquivo: {os.path.basename(caminho_arquivo)}")
+    if best_match:
+        return best_match
+    logger.error(f"No matching category found for file: {os.path.basename(file_path)}")
     return None
 
-# --- NOVA LÓGICA DE CACHE (CSV) ---
-def carregar_cache_concluidos():
+
+# Load completed tasks
+def load_completed_cache():
     cache = set()
-    if not os.path.exists(ARQUIVO_CACHE):
+    if not os.path.exists(CACHE_FILE):
         return cache
-    
+
     try:
-        with open(ARQUIVO_CACHE, mode='r', encoding='utf-8', newline='') as f:
-            leitor = csv.reader(f)
-            next(leitor, None) # Pula o cabeçalho
-            for linha in leitor:
-                if len(linha) >= 2:
-                    # Reconstrói a chave "Registro|Categoria" para usar no set
-                    chave = f"{linha[0]}|{linha[1]}"
-                    cache.add(chave)
+        with open(CACHE_FILE, mode='r', encoding='utf-8', newline='') as f:
+            reader = csv.reader(f)
+            next(reader, None)  # Skip header
+            for row in reader:
+                if len(row) >= 2:
+                    # Rebuild "Record|Category" key for the set
+                    key = f"{row[0]}|{row[1]}"
+                    cache.add(key)
     except Exception as e:
-        logger.error(f"Erro ao ler cache CSV: {e}")
-    
+        logger.error(f"Error reading cache CSV: {e}")
+
     return cache
 
-def registrar_sucesso(registro, categoria):
-    arquivo_existe = os.path.exists(ARQUIVO_CACHE)
-    
+
+# Record task success for each operation
+def record_success(record, category):
+    file_exists = os.path.exists(CACHE_FILE)
+
     try:
-        with open(ARQUIVO_CACHE, mode='a', encoding='utf-8', newline='') as f:
-            escritor = csv.writer(f)
-            
-            # Se é arquivo novo, cria o cabeçalho das colunas
-            if not arquivo_existe:
-                escritor.writerow(["ID_Registro", "Categoria_Atribuida", "Data_Hora_Conclusao"])
-            
-            # Salva os dados
-            data_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            escritor.writerow([registro, categoria, data_hora])
-            
+        with open(CACHE_FILE, mode='a', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+
+            # If new file, create column headers
+            if not file_exists:
+                writer.writerow(["Record_ID", "Assigned_Category", "Completion_DateTime"])
+
+            # Save data
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            writer.writerow([record, category, timestamp])
+
     except Exception as e:
-        logger.error(f"Erro ao salvar no CSV: {e}")
+        logger.error(f"Error saving to CSV: {e}")
 
-# --- EXECUÇÃO PRINCIPAL ---
+
 def main():
-    # 1. Verificação inicial
-    if not verificar_ambiente(): return
+    # 1. Initial check
+    if not verificar_ambiente():
+        return
 
-    # 2. Conecta 
+    # 2. Connect
     try:
         driver = conectar()
     except Exception as e:
-        logger.critical(f"Falha ao conectar: {e}")
+        logger.critical(f"Connection failed: {e}")
         return
 
-    # 3. Lista arquivos
-    arquivos_para_processar = listar_planilhas()
-    logger.info(f"--- INÍCIO DO LOTE ---")
-    logger.info(f"Encontrados {len(arquivos_para_processar)} arquivos na pasta 'tabelas'.")
+    # 3. List files
+    files_to_process = listar_planilhas()
+    logger.info(f"--- BATCH START ---")
+    logger.info(f"Found {len(files_to_process)} files in 'tabelas_a_processar' folder.")
 
-    # 4. Loop pelos arquivos
-    for arquivo_atual in arquivos_para_processar:
-        nome_arquivo = os.path.basename(arquivo_atual)
+    for current_file in files_to_process:
+        file_name = os.path.basename(current_file)
         logger.info(f"\n{'='*40}")
-        logger.info(f"ARQUIVO: {nome_arquivo}")
+        logger.info(f"FILE: {file_name}")
         logger.info(f"{'='*40}")
 
-        categoria_alvo = carregar_parametros_categoria(arquivo_atual)
-        if not categoria_alvo: 
-            logger.warning(f"Pulando arquivo {nome_arquivo} (Categoria não identificada).")
-            continue 
+        target_category = load_category_params(current_file)
+        if not target_category:
+            logger.warning(f"Skipping file {file_name} (Category not identified).")
+            continue
 
-        registros = ler_registros_ods(arquivo_atual)
-        cache_concluidos = carregar_cache_concluidos() 
+        records = read_ods_records(current_file)
+        completed_cache = load_completed_cache()
 
-        # --- ESTATÍSTICAS DE RECUPERAÇÃO ---
-        total_registros = len(registros)
-        feitos_neste_arquivo = 0
-        
-        # Lógica de contagem adaptada
-        for p in registros:
-            chave_verificacao = f"{p}|{categoria_alvo}"
-            if chave_verificacao in cache_concluidos:
-                feitos_neste_arquivo += 1
-        
-        restantes = total_registros - feitos_neste_arquivo
-        logger.info(f"Categoria: {categoria_alvo}")
-        logger.info(f"Status: {feitos_neste_arquivo} já feitos | {restantes} restantes | {total_registros} total")
-        time.sleep(1) 
+        # Recovery statistics
+        total_records = len(records)
+        done_in_this_file = 0
 
-        # 5. Loop pelos registros
-        for id_registro in registros:
-            chave = f"{id_registro}|{categoria_alvo}"
-            
-            if chave in cache_concluidos:
-                logger.info(f"-> [PULANDO] {id_registro} (Já consta no CSV)")
+        for p in records:
+            check_key = f"{p}|{target_category}"
+            if check_key in completed_cache:
+                done_in_this_file += 1
+
+        remaining = total_records - done_in_this_file
+        logger.info(f"Category: {target_category}")
+        logger.info(f"Status: {done_in_this_file} done | {remaining} remaining | {total_records} total")
+        time.sleep(1)
+
+        for record_id in records:
+            key = f"{record_id}|{target_category}"
+
+            if key in completed_cache:
+                logger.info(f"-> [SKIPPING] {record_id} (Already in CSV)")
                 continue
 
-            logger.info(f"Wait... Processando: {id_registro}")
-            fase = 1
-            
+            logger.info(f"Wait... Processing: {record_id}")
+            phase = 1  # State-aware recovery: handles navigation rollbacks per phase
+
+            # HTML interaction
             try:
                 acessar_frame_principal(driver)
-                bloco = obter_painel_de_tarefas(driver)
-                expandir_filtros(bloco)
-                preencher_id_registro(driver, bloco, id_registro)
-                executar_pesquisa(bloco)
+                block = obter_painel_de_tarefas(driver)
+                expandir_filtros(block)
+                preencher_id_registro(driver, block, record_id)
+                executar_pesquisa(block)
                 time.sleep(0.5)
 
-                acessar_item_na_lista(bloco)
+                acessar_item_na_lista(block)
                 abrir_detalhes_registros(driver)
 
-                fase = 2
+                phase = 2
                 clicar_icone_categoria(driver)
                 time.sleep(0.5)
-                inserir_nome_categoria(driver, categoria_alvo)
+                inserir_nome_categoria(driver, target_category)
                 marcar_checkbox_categoria(driver)
                 confirmar_acao_final(driver)
                 time.sleep(2)
-                # Salva no CSV
-                registrar_sucesso(id_registro, categoria_alvo)
-                cache_concluidos.add(chave) 
+
+                record_success(record_id, target_category)  # Save to CSV
+                completed_cache.add(key)
 
                 fechar_modal_clicando_fora(driver)
                 time.sleep(0.5)
                 driver.execute_script("window.history.back()")
                 driver.switch_to.default_content()
-                logger.info(f"[OK] {id_registro} finalizado com sucesso.")
+                logger.info(f"[OK] {record_id} completed successfully.")
 
             except Exception as e:
-                logger.error(f"[ERRO] Falha na Fase {fase} (ID: {id_registro}): {e}")
-                
-                # Tentativa de recuperação de crash
+                logger.error(f"[ERROR] Failure in Phase {phase} (ID: {record_id}): {e}")
+
+                # On error, move to next record
                 try:
-                    if fase == 2:
+                    if phase == 2:
                         driver.execute_script("window.history.back()")
                         time.sleep(2)
                     driver.switch_to.default_content()
-                    logger.warning("Tentando refresh para destravar...")
+                    logger.warning("Attempting refresh to unblock...")
                     driver.refresh()
                     time.sleep(4)
                 except:
                     pass
 
-    logger.info("\n=== BATCH FINALIZADO COMPLETAMENTE ===")
-    logger.info("O navegador permanecerá aberto para verificações futuras.")
+    logger.info("\n=== BATCH FULLY COMPLETED ===")
+    logger.info("Browser will remain open for future inspection.")
+
 
 if __name__ == "__main__":
     main()
