@@ -1,0 +1,14 @@
+# utils/encode_selector.py
+# Run this offline to generate base64 strings for new selectors.
+# This file does NOT go into production — add it to .gitignore if preferred.
+
+import base64
+
+selectors = [
+    "your-css-selector-here",
+    "another-selector-here",
+]
+
+for s in selectors:
+    encoded = base64.b64encode(s.encode("utf-8")).decode("utf-8")
+    print(f"{encoded}")
