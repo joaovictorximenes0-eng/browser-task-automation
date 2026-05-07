@@ -76,7 +76,7 @@ browser-task-automation/
 ---
 ---
 
-# Browser Task Automation
+# Automação de Tarefas do Navegador
 
 > Lê uma lista de tarefas a partir de uma planilha e as atribui automaticamente a responsáveis específicos através de uma interface web — economizando dezenas de horas no fluxo de trabalho semanal de uma equipe.
 
