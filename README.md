@@ -16,6 +16,28 @@ Built with Python and Selenium. The automation handles the full cycle: opens the
 
 ---
 
+## How it works
+
+1. `main.py` reads the spreadsheets from the input folder and identifies the target category based on the filename
+2. For each record, it checks the CSV cache — skipping anything already processed
+3. Opens the browser (or reconnects to an existing session), navigates to the target URL and waits for login if needed
+4. For each pending record: searches by ID, opens the details, assigns the category and confirms
+5. Every success is written to the cache immediately — so an interruption loses at most one record
+
+The page interaction logic is split into two modules: `primeira_pagina.py` handles search and navigation, `segunda_pagina.py` handles the assignment flow.
+
+---
+
+## Can I use this for my own system?
+
+The architecture is reusable — progress cache, session management, logging and selector obfuscation all work independently of the target system.
+
+However, `primeira_pagina.py` and `segunda_pagina.py` contain scraping logic that is specific to the original web interface. To adapt this project to a different system, those two modules would need to be rewritten from scratch through your own scraping work. The effort is the same regardless of which system you target — that part cannot be generalized.
+
+If that still fits your use case, feel free to fork.
+
+---
+
 ## Stack
 
 - Python 3
@@ -45,23 +67,6 @@ browser-task-automation/
 
 ---
 
-## Setup
-
-1. Clone the repository
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-3. Copy `encode_selector.sample.py`, fill in your selectors, run it and paste the output into `web_paths.py`
-4. Add the target URL to `input/url.txt`
-5. Place your spreadsheets in `input/tabelas_a_processar/`
-6. Run:
-```bash
-python main.py
-```
-
----
-
 ## Notes
 
 - Developed and actively used in a real work environment
@@ -69,7 +74,6 @@ python main.py
 - Selector obfuscation is a conscious architectural decision, not a workaround
 
 ---
-
 ---
 
 # Browser Task Automation
@@ -87,6 +91,28 @@ Construído com Python e Selenium. A automação cobre o ciclo completo: abre o 
 - **Ofuscação de seletores** — os seletores web são armazenados em base64, mantendo o sistema-alvo privado (veja `web_paths.sample.py`)
 - **Logs rotativos** — log completo com rotação automática, mantendo o uso de disco sob controle
 - **Gerenciamento automático do ChromeDriver** — instala sempre a versão correta do driver para a instalação atual do Chrome
+
+---
+
+## Como funciona
+
+1. `main.py` lê as planilhas da pasta de input e identifica a categoria alvo com base no nome do arquivo
+2. Para cada registro, verifica o cache CSV — pulando o que já foi processado
+3. Abre o navegador (ou reconecta a uma sessão existente), navega até a URL alvo e aguarda o login se necessário
+4. Para cada registro pendente: pesquisa pelo ID, abre os detalhes, atribui a categoria e confirma
+5. Cada sucesso é gravado no cache imediatamente — uma interrupção perde no máximo um registro
+
+A lógica de interação com as páginas está dividida em dois módulos: `primeira_pagina.py` cuida da pesquisa e navegação, `segunda_pagina.py` cuida do fluxo de atribuição.
+
+---
+
+## Posso usar para o meu sistema?
+
+A arquitetura é reutilizável — cache de progresso, gerenciamento de sessão, logging e ofuscação de seletores funcionam de forma independente do sistema-alvo.
+
+Porém, `primeira_pagina.py` e `segunda_pagina.py` contêm lógica de scraping específica para a interface web original. Para adaptar o projeto a um sistema diferente, esses dois módulos precisariam ser reescritos do zero com o seu próprio trabalho de scraping. O esforço é o mesmo independente do sistema — essa parte não pode ser generalizada.
+
+Se ainda assim faz sentido para o seu caso, fique à vontade para fazer um fork.
 
 ---
 
@@ -115,23 +141,6 @@ browser-task-automation/
 ├── output/                   # Logs e cache de progresso (não versionado)
 ├── encode_selector.sample.py # Como gerar seletores ofuscados
 └── main.py
-```
-
----
-
-## Como usar
-
-1. Clone o repositório
-2. Instale as dependências:
-```bash
-pip install -r requirements.txt
-```
-3. Copie o `encode_selector.sample.py`, preencha com seus seletores, rode e cole o output no `web_paths.py`
-4. Adicione a URL alvo em `input/url.txt`
-5. Coloque as planilhas em `input/tabelas_a_processar/`
-6. Execute:
-```bash
-python main.py
 ```
 
 ---
