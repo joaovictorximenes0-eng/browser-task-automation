@@ -24,6 +24,8 @@ Built with Python and Selenium. The automation handles the full cycle: opens the
 4. For each pending record: searches by ID, opens the details, assigns the category and confirms
 5. Every success is written to the cache immediately — so an interruption loses at most one record
 
+   Note: The target system has no API or integration support, so login requires a human in the loop.
+
 The page interaction logic is split into two modules: `primeira_pagina.py` handles search and navigation, `segunda_pagina.py` handles the assignment flow.
 
 ---
@@ -101,6 +103,8 @@ Construído com Python e Selenium. A automação cobre o ciclo completo: abre o 
 3. Abre o navegador (ou reconecta a uma sessão existente), navega até a URL alvo e aguarda o login se necessário
 4. Para cada registro pendente: pesquisa pelo ID, abre os detalhes, atribui a categoria e confirma
 5. Cada sucesso é gravado no cache imediatamente — uma interrupção perde no máximo um registro
+
+   Nota: O sistema-alvo não possui API ou suporte a integrações, por isso o login requer intervenção humana.
 
 A lógica de interação com as páginas está dividida em dois módulos: `primeira_pagina.py` cuida da pesquisa e navegação, `segunda_pagina.py` cuida do fluxo de atribuição.
 
